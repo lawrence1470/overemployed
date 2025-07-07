@@ -16,8 +16,8 @@ interface SplitTextProps {
 	duration?: number;
 	ease?: string;
 	splitType?: "chars" | "words" | "lines";
-	from?: Record<string, any>;
-	to?: Record<string, any>;
+	from?: Record<string, string | number>;
+	to?: Record<string, string | number>;
 	threshold?: number;
 	rootMargin?: string;
 	textAlign?: "left" | "center" | "right";
@@ -107,9 +107,9 @@ const SplitText = ({
 		}
 
 		// Set will-change for performance
-		targets.forEach((t) => {
+		for (const t of targets) {
 			t.style.willChange = "transform, opacity";
-		});
+		}
 
 		const startPct = (1 - threshold) * 100;
 		const marginMatch = /^(-?\d+(?:\.\d+)?)(px|em|rem|%)?$/.exec(rootMargin);
