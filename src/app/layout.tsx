@@ -1,13 +1,20 @@
 import "~/styles/globals.css";
 
 import type { Metadata } from "next";
-import { Playfair_Display, Poppins, Dancing_Script, Cormorant_Garamond } from "next/font/google";
+import {
+	Cormorant_Garamond,
+	Dancing_Script,
+	Playfair_Display,
+	Poppins,
+} from "next/font/google";
 
+import { AuthProvider } from "~/app/_components/auth/auth-provider";
 import { TRPCReactProvider } from "~/trpc/react";
 
 export const metadata: Metadata = {
 	title: "Are We Hiring the Same Guy?",
-	description: "Advanced employment verification to detect dual employment conflicts across organizations.",
+	description:
+		"Advanced employment verification to detect dual employment conflicts across organizations.",
 	icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 
@@ -37,9 +44,14 @@ export default function RootLayout({
 	children,
 }: Readonly<{ children: React.ReactNode }>) {
 	return (
-		<html lang="en" className={`${playfairDisplay.variable} ${poppins.variable} ${dancingScript.variable} ${cormorantGaramond.variable}`}>
+		<html
+			lang="en"
+			className={`${playfairDisplay.variable} ${poppins.variable} ${dancingScript.variable} ${cormorantGaramond.variable}`}
+		>
 			<body className="font-body">
-				<TRPCReactProvider>{children}</TRPCReactProvider>
+				<TRPCReactProvider>
+					<AuthProvider>{children}</AuthProvider>
+				</TRPCReactProvider>
 			</body>
 		</html>
 	);
