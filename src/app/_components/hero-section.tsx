@@ -56,7 +56,7 @@ export function HeroSection() {
 				</div>
 
 				<a
-					href="/sign-in"
+					href="#contact"
 					className="inline-block rounded-lg bg-white px-6 py-2 font-medium text-black transition-colors hover:bg-gray-100"
 				>
 					Get Started
@@ -154,7 +154,7 @@ export function HeroSection() {
 				{/* Clean CTA buttons */}
 				<div className="flex flex-col items-center gap-4 sm:flex-row">
 					<a
-						href="/sign-in"
+						href="#contact"
 						className="inline-block rounded-lg bg-white px-8 py-3 font-medium text-black transition-colors hover:bg-gray-100"
 					>
 						Start Verification

@@ -2,121 +2,107 @@
 
 ## Overview
 
-The ADP integration provides comprehensive employee data synchronization using ADP's Workforce Now API. This integration supports OAuth 2.0 authentication, complex nested data structures, and real-time event notifications.
+The ADP integration provides comprehensive employee data synchronization using Finch as the unified provider connection layer. Finch abstracts away the complexity of ADP's Workforce Now API, providing a standardized interface while maintaining full access to employee data, organizational structures, and real-time event notifications.
 
 ## Authentication Setup
 
-### 1. OAuth 2.0 Client Credentials Flow
+### 1. Finch OAuth 2.0 Flow
 
-ADP uses OAuth 2.0 with client credentials flow for API access:
+Authentication is handled through Finch's unified OAuth flow, which manages the underlying ADP authentication:
 
 ```typescript
-interface ADPOAuthConfig {
+interface FinchOAuthConfig {
   clientId: string
   clientSecret: string
+  redirectUri: string
   environment: 'production' | 'sandbox'
-  scope: string[]
   
-  // OAuth endpoints
-  tokenUrl: string     // https://accounts.adp.com/auth/oauth/v2/token
-  apiBaseUrl: string   // https://api.adp.com or https://iat-api.adp.com (sandbox)
+  // Finch endpoints
+  authorizationUrl: 'https://connect.tryfinch.com/authorize'
+  tokenUrl: 'https://api.tryfinch.com/auth/token'
+  apiBaseUrl: 'https://api.tryfinch.com'
 }
 
-const adpScopes = [
-  'read:workers',
-  'read:company',
-  'read:employment',
-  'read:positions'
+const finchScopes = [
+  'company',
+  'directory',
+  'individual',
+  'employment'
 ]
 
-class ADPOAuthClient {
-  constructor(private config: ADPOAuthConfig) {}
+class FinchOAuthClient {
+  constructor(private config: FinchOAuthConfig) {}
   
-  async getAccessToken(): Promise<ADPTokens> {
-    const auth = Buffer.from(`${this.config.clientId}:${this.config.clientSecret}`).toString('base64')
+  getAuthorizationUrl(state: string, providerId: string = 'adp'): string {
+    const params = new URLSearchParams({
+      client_id: this.config.clientId,
+      response_type: 'code',
+      redirect_uri: this.config.redirectUri,
+      state,
+      provider: providerId,
+      scope: finchScopes.join(' ')
+    })
     
+    return `${this.config.authorizationUrl}?${params}`
+  }
+  
+  async exchangeCodeForTokens(code: string): Promise<FinchTokens> {
     const response = await fetch(this.config.tokenUrl, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Authorization': `Basic ${auth}`
+        'Content-Type': 'application/json',
+        'Authorization': `Basic ${Buffer.from(`${this.config.clientId}:${this.config.clientSecret}`).toString('base64')}`
       },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        scope: this.config.scope.join(' ')
+      body: JSON.stringify({
+        code,
+        redirect_uri: this.config.redirectUri
       })
     })
     
     if (!response.ok) {
       const error = await response.text()
-      throw new Error(`ADP token request failed: ${error}`)
+      throw new Error(`Finch token exchange failed: ${error}`)
     }
     
     const tokens = await response.json()
     
     return {
       accessToken: tokens.access_token,
-      tokenType: tokens.token_type,
-      expiresIn: tokens.expires_in,
-      scope: tokens.scope,
-      expiresAt: new Date(Date.now() + tokens.expires_in * 1000)
+      accountId: tokens.account_id,
+      companyId: tokens.company_id,
+      providerId: tokens.provider_id,
+      expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000) // 90 days
     }
-  }
-  
-  async refreshToken(): Promise<ADPTokens> {
-    // ADP uses client credentials flow, so we get a new token
-    return await this.getAccessToken()
   }
 }
 ```
 
-### 2. API Client Implementation
+### 2. Finch API Client Implementation
 
 ```typescript
-class ADPAPIClient {
+class FinchAPIClient {
   private accessToken: string
-  private tokenExpiry: Date
-  private oauthClient: ADPOAuthClient
   private baseUrl: string
   
-  constructor(config: ADPOAuthConfig) {
-    this.oauthClient = new ADPOAuthClient(config)
-    this.baseUrl = config.apiBaseUrl
-  }
-  
-  async ensureValidToken(): Promise<void> {
-    if (!this.accessToken || new Date() >= this.tokenExpiry) {
-      const tokens = await this.oauthClient.getAccessToken()
-      this.accessToken = tokens.accessToken
-      this.tokenExpiry = tokens.expiresAt
-    }
+  constructor(accessToken: string, baseUrl: string = 'https://api.tryfinch.com') {
+    this.accessToken = accessToken
+    this.baseUrl = baseUrl
   }
   
   async authenticatedRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
-    await this.ensureValidToken()
-    
     const response = await fetch(`${this.baseUrl}${endpoint}`, {
       ...options,
       headers: {
         'Authorization': `Bearer ${this.accessToken}`,
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
+        'Finch-API-Version': '2020-09-17',
         ...options.headers
       }
     })
     
-    if (response.status === 401) {
-      // Token expired, refresh and retry
-      const tokens = await this.oauthClient.getAccessToken()
-      this.accessToken = tokens.accessToken
-      this.tokenExpiry = tokens.expiresAt
-      
-      return await this.authenticatedRequest(endpoint, options)
-    }
-    
     if (!response.ok) {
       const error = await response.json().catch(() => ({ message: response.statusText }))
-      throw new Error(`ADP API Error: ${response.status} - ${error.message || error.description}`)
+      throw new Error(`Finch API Error: ${response.status} - ${error.message || error.code}`)
     }
     
     return await response.json()
@@ -126,10 +112,12 @@ class ADPAPIClient {
 
 ## Employee Data Integration
 
-### 1. Complex Worker Data Structure
+### 1. Standardized Finch Individual Data Structure
+
+Finch provides a standardized format for employee data across all providers, including ADP:
 
 ```typescript
-interface ADPWorker {
+interface FinchIndividual {
   associateOID: string
   workerID?: {
     idValue: string

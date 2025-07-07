@@ -8,7 +8,7 @@ export const auth = betterAuth({
 		provider: "postgresql",
 	}),
 	secret: env.BETTER_AUTH_SECRET,
-	baseURL: env.BETTER_AUTH_URL || "http://localhost:3000",
+	baseURL: env.BETTER_AUTH_URL || (typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"),
 	emailAndPassword: {
 		enabled: true,
 		requireEmailVerification: false, // Set to true in production
