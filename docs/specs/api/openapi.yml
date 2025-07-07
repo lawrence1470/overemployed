@@ -1,0 +1,1770 @@
+openapi: 3.0.3
+info:
+  title: Are We Hiring the Same Guy API
+  description: |
+    Privacy-first employment verification platform that detects potential employment conflicts 
+    by securely cross-referencing employee data across multiple companies and HR systems.
+    
+    ## Features
+    - Employee matching with fuzzy algorithms
+    - HR system integrations (JustWorks, BambooHR, Workday, ADP)
+    - Privacy-preserving data processing
+    - Real-time conflict detection
+    - Comprehensive reporting and analytics
+    
+    ## Authentication
+    All API endpoints require authentication using Bearer tokens obtained through OAuth 2.0 flow.
+    
+    ## Rate Limiting
+    API requests are rate-limited per company:
+    - Standard plan: 1000 requests/hour
+    - Enterprise plan: 10000 requests/hour
+    
+    ## Data Privacy
+    All employee PII is encrypted and processed according to GDPR, CCPA, and SOC 2 compliance standards.
+    
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: api-support@overemployed-detection.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.overemployed-detection.com/v1
+    description: Production server
+  - url: https://staging-api.overemployed-detection.com/v1
+    description: Staging server
+  - url: http://localhost:3000/api/trpc
+    description: Local development server
+
+security:
+  - BearerAuth: []
+
+tags:
+  - name: Authentication
+    description: Authentication and authorization operations
+  - name: Employees
+    description: Employee data management
+  - name: Matches
+    description: Employment conflict matching operations
+  - name: Integrations
+    description: HR system integrations
+  - name: Reports
+    description: Analytics and reporting
+  - name: Webhooks
+    description: Webhook management
+  - name: Companies
+    description: Company management operations
+  - name: Compliance
+    description: Privacy and compliance operations
+
+paths:
+  # Authentication Endpoints
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Authenticate user
+      description: Authenticate user with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  example: user@company.com
+                password:
+                  type: string
+                  format: password
+                  minLength: 8
+                  example: "SecurePassword123!"
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Refresh access token
+      description: Refresh expired access token using refresh token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+                  example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+
+  # Employee Endpoints
+  /employees:
+    get:
+      tags: [Employees]
+      summary: List employees
+      description: Retrieve paginated list of employees for the authenticated company
+      parameters:
+        - name: page
+          in: query
+          description: Page number (1-based)
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          description: Filter by employee status
+          schema:
+            $ref: '#/components/schemas/EmployeeStatus'
+        - name: search
+          in: query
+          description: Search by name or email
+          schema:
+            type: string
+            maxLength: 100
+        - name: department
+          in: query
+          description: Filter by department
+          schema:
+            type: string
+            maxLength: 100
+      responses:
+        '200':
+          description: Employees retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Employee'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationInfo'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+    post:
+      tags: [Employees]
+      summary: Create employee
+      description: Add a new employee to the system
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateEmployeeRequest'
+      responses:
+        '201':
+          description: Employee created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /employees/{employeeId}:
+    get:
+      tags: [Employees]
+      summary: Get employee by ID
+      description: Retrieve detailed information about a specific employee
+      parameters:
+        - name: employeeId
+          in: path
+          required: true
+          description: Employee ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Employee details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      tags: [Employees]
+      summary: Update employee
+      description: Update employee information
+      parameters:
+        - name: employeeId
+          in: path
+          required: true
+          description: Employee ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateEmployeeRequest'
+      responses:
+        '200':
+          description: Employee updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Employee'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      tags: [Employees]
+      summary: Delete employee
+      description: Remove employee from the system (soft delete with retention policy)
+      parameters:
+        - name: employeeId
+          in: path
+          required: true
+          description: Employee ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Employee deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  # Matching Endpoints
+  /matches:
+    get:
+      tags: [Matches]
+      summary: List employment matches
+      description: Retrieve potential employment conflicts
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: status
+          in: query
+          description: Filter by match status
+          schema:
+            $ref: '#/components/schemas/MatchStatus'
+        - name: confidenceThreshold
+          in: query
+          description: Minimum confidence score (0.0 to 1.0)
+          schema:
+            type: number
+            minimum: 0.0
+            maximum: 1.0
+            default: 0.7
+        - name: riskLevel
+          in: query
+          description: Filter by risk level
+          schema:
+            $ref: '#/components/schemas/RiskLevel'
+      responses:
+        '200':
+          description: Matches retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Match'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationInfo'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+    post:
+      tags: [Matches]
+      summary: Run matching process
+      description: Trigger employment matching process for specific employees or entire company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RunMatchingRequest'
+      responses:
+        '202':
+          description: Matching process started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                    format: uuid
+                    description: Matching job ID for tracking progress
+                  status:
+                    type: string
+                    enum: [queued, processing]
+                  estimatedCompletion:
+                    type: string
+                    format: date-time
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /matches/{matchId}:
+    get:
+      tags: [Matches]
+      summary: Get match details
+      description: Retrieve detailed information about a specific match
+      parameters:
+        - name: matchId
+          in: path
+          required: true
+          description: Match ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Match details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MatchDetail'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /matches/{matchId}/review:
+    post:
+      tags: [Matches]
+      summary: Review match
+      description: Review and update match status (confirm/reject)
+      parameters:
+        - name: matchId
+          in: path
+          required: true
+          description: Match ID
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReviewMatchRequest'
+      responses:
+        '200':
+          description: Match reviewed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Match'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  # Integration Endpoints
+  /integrations:
+    get:
+      tags: [Integrations]
+      summary: List integrations
+      description: Retrieve configured HR system integrations
+      responses:
+        '200':
+          description: Integrations retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Integration'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+    post:
+      tags: [Integrations]
+      summary: Create integration
+      description: Configure a new HR system integration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateIntegrationRequest'
+      responses:
+        '201':
+          description: Integration created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Integration'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /integrations/{integrationId}:
+    get:
+      tags: [Integrations]
+      summary: Get integration details
+      parameters:
+        - name: integrationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Integration details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IntegrationDetail'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      tags: [Integrations]
+      summary: Update integration
+      parameters:
+        - name: integrationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateIntegrationRequest'
+      responses:
+        '200':
+          description: Integration updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Integration'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      tags: [Integrations]
+      summary: Delete integration
+      parameters:
+        - name: integrationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Integration deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  /integrations/{integrationId}/sync:
+    post:
+      tags: [Integrations]
+      summary: Trigger integration sync
+      description: Manually trigger data synchronization from HR system
+      parameters:
+        - name: integrationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                fullSync:
+                  type: boolean
+                  default: false
+                  description: Whether to perform full sync or incremental
+      responses:
+        '202':
+          description: Sync started successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum: [queued, processing]
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  # Reports Endpoints
+  /reports:
+    get:
+      tags: [Reports]
+      summary: List available reports
+      description: Retrieve list of available report templates and generated reports
+      parameters:
+        - name: type
+          in: query
+          description: Filter by report type
+          schema:
+            $ref: '#/components/schemas/ReportType'
+        - name: status
+          in: query
+          description: Filter by report status
+          schema:
+            type: string
+            enum: [pending, processing, completed, failed]
+      responses:
+        '200':
+          description: Reports retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Report'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+    post:
+      tags: [Reports]
+      summary: Generate report
+      description: Create a new report with specified parameters
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateReportRequest'
+      responses:
+        '202':
+          description: Report generation started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reportId:
+                    type: string
+                    format: uuid
+                  status:
+                    type: string
+                    enum: [queued, processing]
+                  estimatedCompletion:
+                    type: string
+                    format: date-time
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /reports/{reportId}:
+    get:
+      tags: [Reports]
+      summary: Get report
+      description: Retrieve generated report content
+      parameters:
+        - name: reportId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: format
+          in: query
+          description: Report format
+          schema:
+            type: string
+            enum: [json, pdf, excel, csv]
+            default: json
+      responses:
+        '200':
+          description: Report retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportData'
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema:
+                type: string
+                format: binary
+            text/csv:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+  # Webhook Endpoints
+  /webhooks:
+    get:
+      tags: [Webhooks]
+      summary: List webhooks
+      description: Retrieve configured webhooks
+      responses:
+        '200':
+          description: Webhooks retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Webhook'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+
+    post:
+      tags: [Webhooks]
+      summary: Create webhook
+      description: Configure a new webhook endpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWebhookRequest'
+      responses:
+        '201':
+          description: Webhook created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /webhooks/{webhookId}:
+    get:
+      tags: [Webhooks]
+      summary: Get webhook details
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Webhook details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookDetail'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+    put:
+      tags: [Webhooks]
+      summary: Update webhook
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateWebhookRequest'
+      responses:
+        '200':
+          description: Webhook updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Webhook'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+    delete:
+      tags: [Webhooks]
+      summary: Delete webhook
+      parameters:
+        - name: webhookId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Webhook deleted successfully
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # Authentication Schemas
+    AuthResponse:
+      type: object
+      properties:
+        accessToken:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        refreshToken:
+          type: string
+          example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+        expiresIn:
+          type: integer
+          example: 3600
+        tokenType:
+          type: string
+          example: "Bearer"
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          $ref: '#/components/schemas/UserRole'
+        companyId:
+          type: string
+          format: uuid
+        permissions:
+          type: array
+          items:
+            type: string
+
+    UserRole:
+      type: string
+      enum: [admin, hr_manager, compliance_officer, viewer]
+
+    # Employee Schemas
+    Employee:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        companyId:
+          type: string
+          format: uuid
+        firstName:
+          type: string
+          maxLength: 50
+        lastName:
+          type: string
+          maxLength: 50
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          pattern: '^\+?[1-9]\d{1,14}$'
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        status:
+          $ref: '#/components/schemas/EmployeeStatus'
+        jobTitle:
+          type: string
+          maxLength: 100
+        department:
+          type: string
+          maxLength: 100
+        employeeType:
+          $ref: '#/components/schemas/EmployeeType'
+        workLocation:
+          type: string
+          maxLength: 100
+        integrationId:
+          type: string
+          format: uuid
+          nullable: true
+        externalId:
+          type: string
+          nullable: true
+        lastSyncAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    EmployeeStatus:
+      type: string
+      enum: [active, inactive, terminated, on_leave]
+
+    EmployeeType:
+      type: string
+      enum: [full_time, part_time, contract, intern]
+
+    CreateEmployeeRequest:
+      type: object
+      required: [firstName, lastName, startDate, status]
+      properties:
+        firstName:
+          type: string
+          maxLength: 50
+        lastName:
+          type: string
+          maxLength: 50
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          pattern: '^\+?[1-9]\d{1,14}$'
+        ssn:
+          type: string
+          pattern: '^\d{3}-\d{2}-\d{4}$'
+          description: Encrypted and hashed for matching
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        status:
+          $ref: '#/components/schemas/EmployeeStatus'
+        jobTitle:
+          type: string
+          maxLength: 100
+        department:
+          type: string
+          maxLength: 100
+        employeeType:
+          $ref: '#/components/schemas/EmployeeType'
+        workLocation:
+          type: string
+          maxLength: 100
+
+    UpdateEmployeeRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+          maxLength: 50
+        lastName:
+          type: string
+          maxLength: 50
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          pattern: '^\+?[1-9]\d{1,14}$'
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        status:
+          $ref: '#/components/schemas/EmployeeStatus'
+        jobTitle:
+          type: string
+          maxLength: 100
+        department:
+          type: string
+          maxLength: 100
+        employeeType:
+          $ref: '#/components/schemas/EmployeeType'
+        workLocation:
+          type: string
+          maxLength: 100
+
+    # Match Schemas
+    Match:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        employee1Id:
+          type: string
+          format: uuid
+        employee2Id:
+          type: string
+          format: uuid
+        employee1Summary:
+          $ref: '#/components/schemas/EmployeeSummary'
+        employee2Summary:
+          $ref: '#/components/schemas/EmployeeSummary'
+        confidenceScore:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+        riskLevel:
+          $ref: '#/components/schemas/RiskLevel'
+        status:
+          $ref: '#/components/schemas/MatchStatus'
+        temporalOverlap:
+          type: boolean
+        overlapDays:
+          type: integer
+          minimum: 0
+        matchFactors:
+          type: array
+          items:
+            $ref: '#/components/schemas/MatchFactor'
+        reviewedAt:
+          type: string
+          format: date-time
+          nullable: true
+        reviewedBy:
+          type: string
+          format: uuid
+          nullable: true
+        reviewNotes:
+          type: string
+          maxLength: 1000
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    MatchDetail:
+      allOf:
+        - $ref: '#/components/schemas/Match'
+        - type: object
+          properties:
+            employee1:
+              $ref: '#/components/schemas/Employee'
+            employee2:
+              $ref: '#/components/schemas/Employee'
+            detailedAnalysis:
+              $ref: '#/components/schemas/MatchAnalysis'
+
+    EmployeeSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        company:
+          type: string
+        jobTitle:
+          type: string
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+          nullable: true
+
+    MatchStatus:
+      type: string
+      enum: [pending, confirmed, rejected, needs_review]
+
+    RiskLevel:
+      type: string
+      enum: [low, medium, high, critical]
+
+    MatchFactor:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [ssn, email, phone, name, address]
+        similarity:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+        weight:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+
+    MatchAnalysis:
+      type: object
+      properties:
+        identifierMatches:
+          type: object
+          properties:
+            ssnMatch:
+              type: boolean
+            emailMatch:
+              type: boolean
+            phoneMatch:
+              type: boolean
+            namesSimilarity:
+              type: number
+              minimum: 0.0
+              maximum: 1.0
+        temporalAnalysis:
+          type: object
+          properties:
+            overlapDays:
+              type: integer
+            overlapPercentage:
+              type: number
+            withinGracePeriod:
+              type: boolean
+            gracePeriodDays:
+              type: integer
+        riskFactors:
+          type: array
+          items:
+            type: string
+        recommendations:
+          type: array
+          items:
+            type: string
+
+    RunMatchingRequest:
+      type: object
+      properties:
+        employeeIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Specific employees to match (empty = all employees)
+        confidenceThreshold:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          default: 0.7
+        includeTemporalAnalysis:
+          type: boolean
+          default: true
+        excludeCompanies:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Companies to exclude from matching
+
+    ReviewMatchRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [confirmed, rejected]
+        notes:
+          type: string
+          maxLength: 1000
+        followUpRequired:
+          type: boolean
+          default: false
+        tags:
+          type: array
+          items:
+            type: string
+            maxLength: 50
+
+    # Integration Schemas
+    Integration:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        companyId:
+          type: string
+          format: uuid
+        provider:
+          $ref: '#/components/schemas/IntegrationProvider'
+        name:
+          type: string
+        status:
+          $ref: '#/components/schemas/IntegrationStatus'
+        lastSyncAt:
+          type: string
+          format: date-time
+          nullable: true
+        nextSyncAt:
+          type: string
+          format: date-time
+          nullable: true
+        syncFrequency:
+          type: string
+          enum: [manual, hourly, daily, weekly]
+        employeeCount:
+          type: integer
+          minimum: 0
+        errorCount:
+          type: integer
+          minimum: 0
+        settings:
+          $ref: '#/components/schemas/IntegrationSettings'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    IntegrationDetail:
+      allOf:
+        - $ref: '#/components/schemas/Integration'
+        - type: object
+          properties:
+            syncHistory:
+              type: array
+              items:
+                $ref: '#/components/schemas/SyncRecord'
+            webhookConfig:
+              $ref: '#/components/schemas/WebhookConfig'
+            fieldMapping:
+              type: object
+              additionalProperties:
+                type: string
+
+    IntegrationProvider:
+      type: string
+      enum: [justworks, bamboo_hr, workday, adp, custom]
+
+    IntegrationStatus:
+      type: string
+      enum: [active, inactive, error, pending, authenticating]
+
+    IntegrationSettings:
+      type: object
+      properties:
+        syncEmployees:
+          type: boolean
+          default: true
+        syncEmploymentHistory:
+          type: boolean
+          default: true
+        syncPersonalInfo:
+          type: boolean
+          default: true
+        enableWebhooks:
+          type: boolean
+          default: false
+        includeTerminated:
+          type: boolean
+          default: false
+        includeContractors:
+          type: boolean
+          default: true
+        departmentFilters:
+          type: array
+          items:
+            type: string
+        locationFilters:
+          type: array
+          items:
+            type: string
+
+    CreateIntegrationRequest:
+      type: object
+      required: [provider, name, credentials]
+      properties:
+        provider:
+          $ref: '#/components/schemas/IntegrationProvider'
+        name:
+          type: string
+          maxLength: 100
+        credentials:
+          type: object
+          description: Provider-specific credentials (encrypted)
+        settings:
+          $ref: '#/components/schemas/IntegrationSettings'
+        syncFrequency:
+          type: string
+          enum: [manual, hourly, daily, weekly]
+          default: daily
+
+    UpdateIntegrationRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        credentials:
+          type: object
+          description: Provider-specific credentials (encrypted)
+        settings:
+          $ref: '#/components/schemas/IntegrationSettings'
+        syncFrequency:
+          type: string
+          enum: [manual, hourly, daily, weekly]
+        status:
+          $ref: '#/components/schemas/IntegrationStatus'
+
+    SyncRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [running, completed, failed, cancelled]
+        employeesProcessed:
+          type: integer
+          minimum: 0
+        employeesAdded:
+          type: integer
+          minimum: 0
+        employeesUpdated:
+          type: integer
+          minimum: 0
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              message:
+                type: string
+              code:
+                type: string
+              details:
+                type: object
+
+    # Report Schemas
+    Report:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        type:
+          $ref: '#/components/schemas/ReportType'
+        status:
+          type: string
+          enum: [pending, processing, completed, failed]
+        generatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        generatedBy:
+          type: string
+          format: uuid
+        filters:
+          type: object
+        downloadUrl:
+          type: string
+          format: uri
+          nullable: true
+        expiresAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    ReportType:
+      type: string
+      enum: [executive_summary, detailed_analysis, compliance_report, risk_assessment, integration_status]
+
+    GenerateReportRequest:
+      type: object
+      required: [type, title]
+      properties:
+        type:
+          $ref: '#/components/schemas/ReportType'
+        title:
+          type: string
+          maxLength: 200
+        filters:
+          type: object
+          properties:
+            dateRange:
+              type: object
+              properties:
+                start:
+                  type: string
+                  format: date
+                end:
+                  type: string
+                  format: date
+            companies:
+              type: array
+              items:
+                type: string
+                format: uuid
+            departments:
+              type: array
+              items:
+                type: string
+            riskLevels:
+              type: array
+              items:
+                $ref: '#/components/schemas/RiskLevel'
+        format:
+          type: string
+          enum: [pdf, excel, csv, json]
+          default: pdf
+        includeCharts:
+          type: boolean
+          default: true
+        includeRawData:
+          type: boolean
+          default: false
+
+    ReportData:
+      type: object
+      properties:
+        reportId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        generatedAt:
+          type: string
+          format: date-time
+        summary:
+          type: object
+        sections:
+          type: array
+          items:
+            type: object
+            properties:
+              title:
+                type: string
+              type:
+                type: string
+              content:
+                type: object
+
+    # Webhook Schemas
+    Webhook:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        companyId:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEvent'
+        status:
+          type: string
+          enum: [active, inactive, failed]
+        lastTriggered:
+          type: string
+          format: date-time
+          nullable: true
+        successRate:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    WebhookDetail:
+      allOf:
+        - $ref: '#/components/schemas/Webhook'
+        - type: object
+          properties:
+            secret:
+              type: string
+              description: Secret for signature verification
+            deliveryHistory:
+              type: array
+              items:
+                $ref: '#/components/schemas/WebhookDelivery'
+
+    WebhookEvent:
+      type: string
+      enum: [
+        match.created,
+        match.updated,
+        match.reviewed,
+        employee.created,
+        employee.updated,
+        employee.deleted,
+        integration.sync.completed,
+        integration.sync.failed,
+        compliance.alert
+      ]
+
+    CreateWebhookRequest:
+      type: object
+      required: [url, events]
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEvent'
+        description:
+          type: string
+          maxLength: 200
+
+    UpdateWebhookRequest:
+      type: object
+      properties:
+        url:
+          type: string
+          format: uri
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookEvent'
+        status:
+          type: string
+          enum: [active, inactive]
+        description:
+          type: string
+          maxLength: 200
+
+    WebhookConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        retryAttempts:
+          type: integer
+          minimum: 0
+          maximum: 5
+        timeoutSeconds:
+          type: integer
+          minimum: 1
+          maximum: 60
+
+    WebhookDelivery:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        event:
+          $ref: '#/components/schemas/WebhookEvent'
+        status:
+          type: string
+          enum: [success, failed, pending, retrying]
+        attempts:
+          type: integer
+          minimum: 1
+        lastAttempt:
+          type: string
+          format: date-time
+        responseStatus:
+          type: integer
+          nullable: true
+        responseTime:
+          type: integer
+          description: Response time in milliseconds
+          nullable: true
+        errorMessage:
+          type: string
+          nullable: true
+
+    # Common Schemas
+    PaginationInfo:
+      type: object
+      properties:
+        page:
+          type: integer
+          minimum: 1
+        limit:
+          type: integer
+          minimum: 1
+        total:
+          type: integer
+          minimum: 0
+        totalPages:
+          type: integer
+          minimum: 0
+        hasNext:
+          type: boolean
+        hasPrev:
+          type: boolean
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            details:
+              type: object
+              nullable: true
+            timestamp:
+              type: string
+              format: date-time
+            traceId:
+              type: string
+              format: uuid
+
+    ValidationError:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            error:
+              type: object
+              properties:
+                code:
+                  type: string
+                  example: "VALIDATION_ERROR"
+                message:
+                  type: string
+                  example: "Invalid input data"
+                details:
+                  type: object
+                  properties:
+                    fieldErrors:
+                      type: object
+                      additionalProperties:
+                        type: array
+                        items:
+                          type: string
+
+  responses:
+    UnauthorizedError:
+      description: Unauthorized - Invalid or missing authentication token
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "UNAUTHORIZED"
+              message: "Invalid or missing authentication token"
+              timestamp: "2023-12-07T10:30:00Z"
+              traceId: "550e8400-e29b-41d4-a716-446655440000"
+
+    ForbiddenError:
+      description: Forbidden - Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "FORBIDDEN"
+              message: "Insufficient permissions to access this resource"
+              timestamp: "2023-12-07T10:30:00Z"
+              traceId: "550e8400-e29b-41d4-a716-446655440000"
+
+    NotFoundError:
+      description: Not Found - Resource does not exist
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "NOT_FOUND"
+              message: "The requested resource was not found"
+              timestamp: "2023-12-07T10:30:00Z"
+              traceId: "550e8400-e29b-41d4-a716-446655440000"
+
+    ValidationError:
+      description: Validation Error - Invalid input data
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationError'
+          example:
+            error:
+              code: "VALIDATION_ERROR"
+              message: "Invalid input data"
+              details:
+                fieldErrors:
+                  email: ["Invalid email format"]
+                  startDate: ["Date must be in the future"]
+              timestamp: "2023-12-07T10:30:00Z"
+              traceId: "550e8400-e29b-41d4-a716-446655440000"
+
+    RateLimitError:
+      description: Rate Limit Exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            error:
+              code: "RATE_LIMIT_EXCEEDED"
+              message: "API rate limit exceeded. Try again later."
+              details:
+                limit: 1000
+                window: "1 hour"
+                resetTime: "2023-12-07T11:00:00Z"
+              timestamp: "2023-12-07T10:30:00Z"
+              traceId: "550e8400-e29b-41d4-a716-446655440000"
